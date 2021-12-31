@@ -1,0 +1,12 @@
+{
+  entry: "run bot.js --help",
+  files: {
+    "bot.js": "https://raw.githubusercontent.com/macgregor/bitburner/master/bot/bot.js",
+    "lib.js": "https://raw.githubusercontent.com/macgregor/bitburner/master/bot/lib.js",
+    "module_coding_contracts.js": "https://raw.githubusercontent.com/macgregor/bitburner/master/bot/module_coding_contracts.js",
+    "module_hacking.js": "https://raw.githubusercontent.com/macgregor/bitburner/master/bot/module_hacking.js",
+    "module_purchase_servers.js": "https://raw.githubusercontent.com/macgregor/bitburner/master/bot/module_purchase_servers.js",
+    "module_singularity.js": "https://raw.githubusercontent.com/macgregor/bitburner/master/bot/module_singularity.js",
+    "module_stock_trader.js": "https://raw.githubusercontent.com/macgregor/bitburner/master/bot/module_stock_trader.js"
+  }
+}
