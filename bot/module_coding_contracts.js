@@ -442,10 +442,7 @@ class CompleteCodingContracts extends lib.Action {
 
 /** @param {NS} ns **/
 export async function main(ns) {
-  const args = {
-    logLevel: "info",
-  }
-    const context = new CodingContractContext(ns, args)
+  const context = new CodingContractContext(ns, "config.txt")
   const bot = new lib.ModuleEngine(context)
   bot.setActions([
     new CompleteCodingContracts()

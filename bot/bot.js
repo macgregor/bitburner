@@ -55,24 +55,21 @@ class ModuleLauncher extends lib.Module{
   }
 }
 
+function loadModules(context){
+  const modules = []
+  const home = context.network.server("home")
+  for(const f of home.files){
+    if(f.startsWith("module_")){
+      modules.push(new ModuleLauncher(f))
+    }
+  }
+}
+
 /** @param {NS} ns **/
 export async function main(ns) {
-  const args = {
-    logLevel: "debug",
-  }
-	const context = new BotContext(ns, args)
+	const context = new BotContext(ns, "config.txt")
   const bot = new lib.BotEngine(context)
-  bot.setModules([
-      //new ModuleLauncher("module_hacking.js"),
-      //new ModuleLauncher("module_coding_contracts.js"),
-      //new ModuleLauncher("module_singularity.js"),
-      new ModuleLauncher("module_purchase_servers.js"),
-      //new ModuleLauncher("module_hacknet_servers.js"),
-      //new ModuleLauncher("module_stock_trader.js"),
-    ]
-  )
-
-
+  bot.setModules(loadModules(context))
 	await bot.daemon()
 
 }

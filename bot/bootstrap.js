@@ -1,7 +1,7 @@
 const MANIFEST_URL = "https://raw.githubusercontent.com/macgregor/bitburner/master/bot/manifest.json"
 
 async function copy(ns, sourceFilename, destFilename){
-  if(ns.fileexists(sourceFilename)){
+  if(ns.fileExists(sourceFilename)){
     const data = ns.read(sourceFilename)
     await ns.write(destFilename, data, "w")
     return true
@@ -24,7 +24,7 @@ async function restore(ns, filename){
 }
 
 async function downloadFile(ns, url, localFilename, isJson=false){
-  await backup(localFilename)
+  await backup(ns, localFilename)
   ns.rm(localFilename)
   if(!await ns.wget(url, localFilename)){
     ns.tprint("Unable to download file from " + url)
@@ -37,7 +37,12 @@ async function downloadFile(ns, url, localFilename, isJson=false){
     await restore(ns, localFilename)
     return false
   } else if(isJson){
-    data = JSON.parse(data)
+    try{
+      data = JSON.parse(data)
+    } catch(error){
+      ns.tprint("Unexpected error parsing data " + error)
+      return false
+    }
   }
   return data
 }
@@ -45,11 +50,11 @@ async function downloadFile(ns, url, localFilename, isJson=false){
 function validateManifest(ns, manifest){
   var buffer = []
 
-  function validateKey(key, constructorType){
+  function validateKey(key, dataType){
     if(!manifest.hasOwnProperty(key)){
       buffer.push("missing field '"+key+"'")
-    } else if(manifest[key].constructor.type != constructorType){
-      buffer.push("'"+key+"' should be type '"+constructorType+"' but is '" + manifest.files.constructor.type+"'")
+    } else if(typeof manifest[key] != dataType){
+      buffer.push("'"+key+"' should be type '"+dataType+"' but is '" + typeof manifest[key]+"'")
     }
   }
 
@@ -57,8 +62,8 @@ function validateManifest(ns, manifest){
   if(!manifest){
     buffer.push("no manifest data")
   } else {
-    validateKey("files", "Object")
-    validateKey("entry", "String")
+    validateKey("files", "object")
+    validateKey("entry", "string")
   }
 
   if(buffer.length > 0){
@@ -70,6 +75,7 @@ function validateManifest(ns, manifest){
 
 export async function main(ns) {
   const manifest = await downloadFile(ns, MANIFEST_URL, "manifest.txt", true)
+  ns.tprint(JSON.stringify(manifest, null, 2))
   if(!validateManifest(ns, manifest)){
     ns.tprint("ERROR unable to continue")
     return

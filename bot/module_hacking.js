@@ -246,13 +246,7 @@ class HackAttack extends BotnetAttack {
 
 /** @param {NS} ns **/
 export async function main(ns) {
-  const args = {
-    logLevel: "info",
-    logPort: 1,
-    cashReserve: 10000000,
-    homeRamReserve: 32,
-  }
-	const context = new HackingContext(ns, args)
+	const context = new HackingContext(ns, "config.txt")
   const bot = new lib.ModuleEngine(context)
   bot.setActions([
     new ServerBreachAction(),

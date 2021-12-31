@@ -189,10 +189,7 @@ class PurchaseServerAction extends ServerPurchaseAction {
 
 /** @param {NS} ns **/
 export async function main(ns) {
-  const args = {
-    logLevel: "info",
-  }
-	const context = new PurchaseServersContext(ns, args)
+	const context = new PurchaseServersContext(ns, "config.txt")
   const bot = new lib.ModuleEngine(context)
   await ns.write(context.fileLock, 0, "w")
   bot.setActions([

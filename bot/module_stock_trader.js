@@ -172,10 +172,7 @@ class BuyStocksAction extends StockTraderAction {
 
 /** @param {NS} ns **/
 export async function main(ns) {
-  const args = {
-    logLevel: "info",
-  }
-	const context = new StockTraderContext(ns, args)
+	const context = new StockTraderContext(ns, "config.txt")
   const bot = new lib.ModuleEngine(context)
   bot.setActions([
     new SellStocksAction(0),

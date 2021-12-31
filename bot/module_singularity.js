@@ -60,13 +60,7 @@ class InstallBackdoorAction extends lib.Action{
 
 /** @param {NS} ns **/
 export async function main(ns) {
-  const args = {
-    logLevel: "info",
-    logPort: 1,
-    cashReserve: 10000000,
-    homeRamReserve: 32,
-  }
-	const context = new SingularityContext(ns, args)
+	const context = new SingularityContext(ns, "config.txt")
   const bot = new lib.ModuleEngine(context)
   bot.setActions([])
 

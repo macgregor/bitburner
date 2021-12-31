@@ -46,7 +46,7 @@ async function PortLogEmitter(script, name, level, msg, data=null){
    msg: msg,
    data: data
  }
- if(LOG_LEVELS[level] <= LOG_LEVELS[context.logLevel]){
+ if(LOG_LEVELS[level] <= LOG_LEVELS[context.logLevel(name)]){
    return context.ns.writePort(context.logPort, JSON.stringify(logMsg))
  }
 }
@@ -65,7 +65,7 @@ async function NativeLogEmitter(script, name, level, msg, data=null){
    logMsg += "\n" + JSON.stringify(data, null, 2)
  }
 
- if(LOG_LEVELS[level] <= LOG_LEVELS[context.logLevel]){
+ if(LOG_LEVELS[level] <= LOG_LEVELS[context.logLevel(name)]){
    return context.ns.print(logMsg)
  }
 }
@@ -83,14 +83,26 @@ export class Context{
    }
 
    /** @param {NS} ns **/
-   constructor(ns, args=null){
+   constructor(ns, configFilename="config.txt"){
        this.ns = ns
-       this.logLevel = orElse(args, "logLevel", "info")
-       this.logPort = orElse(args, "logPort", 1)
-       this.cashReserve = orElse(args, "cashReserve", 10000000)
-       this.homeRamReserve = orElse(args, "homeRamReserve", 32)
-       this.purchaseServerHostname = orElse(args, "purchaseServerHostname", "pserv")
-       this.fileLock = orElse(args, "fileLock", "_lock.txt")
+       this.configFilename = configFilename
+       this.logLevels = {"root": "info"}
+
+       var config = {}
+       try{
+         config = JSON.parse(ns.read(configFilename))
+       } catch(error){
+         Logger.getLogger(this).error("Unable to parse config file")
+       }
+       this.logPort = orElse(config, "logPort", 1)
+       this.cashReserve = orElse(config, "cashReserve", 10000000)
+       this.homeRamReserve = orElse(config, "homeRamReserve", 32)
+       this.purchaseServerHostname = orElse(config, "purchaseServerHostname", "pserv")
+       this.fileLock = orElse(config, "fileLock", "_lock.txt")
+       this.disabledModules = orElse(config, "disabledModules", [])
+       this.logLevels = orElse(config, "loggers", this.logLevels)
+       this.logLevels.root = orElse(this.logLevels, "root", "info")
+        }
    }
 
    setPlayerInfo(playerInfo){
@@ -110,6 +122,15 @@ export class Context{
 
    logEmitter(){
      return NativeLogEmitter
+   }
+
+   logLevel(name){
+      for(const [logName, level] of Object.entries(this.logLevels)){
+        if(logName == name){
+          return level
+        }
+      }
+      return this.loggers.root
    }
 
    playerInitializer(){
@@ -775,6 +796,11 @@ export class Module extends Base{
   }
 
   async canLaunch(context){
+    if(context.disabledModules.includes(this.script)){
+      this.logger.debug(StringFormatter.sprintf("Module %s unlaunchable: disabled in config file.", this.script))
+      return false
+    }
+
     const threads = await this.determineThreads(context)
     const host = await this.determineHost(context)
     if(!host){
@@ -786,11 +812,11 @@ export class Module extends Base{
       return false
     }
     if(await this.isProcRunning(context)){
-      this.logger.trace(StringFormatter.sprintf("Module %s unlaunchable: already running on %s.", this.script, host.hostname))
+      this.logger.debug(StringFormatter.sprintf("Module %s unlaunchable: already running on %s.", this.script, host.hostname))
       return false
     }
     if(host.availableRam() < this.costWrapper(context, this.script)*threads){
-      this.logger.trace(StringFormatter.sprintf("Module %s unlaunchable: not enough ram available on host %s.", this.script, host.hostname))
+      this.logger.debug(StringFormatter.sprintf("Module %s unlaunchable: not enough ram available on host %s.", this.script, host.hostname))
       return false //not enough ram
     }
     return true
@@ -828,11 +854,17 @@ export class Module extends Base{
 
 export class BotEngine extends Base{
 
-    constructor(context, actions){
+    constructor(context, modules){
       super()
       Context.initialize(context)
       context.setPlayerInfo(new PlayerInfo())
       context.setNetwork(new Network())
+      this.modules = []
+    }
+
+    setModules(modules){
+      this.modules = modules
+      return this
     }
 
     async displayModules(){
@@ -912,6 +944,7 @@ export class ModuleEngine extends Base{
 
   setActions(actions){
     this.actions = actions
+    return this
   }
 
   async displayActions(){

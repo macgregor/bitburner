@@ -1,0 +1,12 @@
+{
+  "logPort": 1,
+  "cashReserve": 10000000,
+  "homeRamReserve": 32,
+  "purchaseServerHostname": "pserv",
+  "fileLock": "_lock.txt",
+  "disabledModules": ["module_stock_trader.js","module_singularity.js"],
+  "loggers": {
+    "root": "info",
+    "lib.Bot": "info"
+  }
+}
