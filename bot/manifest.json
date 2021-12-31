@@ -1,6 +1,6 @@
 {
-  entry: "run bot.js --help",
-  files: {
+  "entry": "run bot.js --help",
+  "files": {
     "bot.js": "https://raw.githubusercontent.com/macgregor/bitburner/master/bot/bot.js",
     "lib.js": "https://raw.githubusercontent.com/macgregor/bitburner/master/bot/lib.js",
     "module_coding_contracts.js": "https://raw.githubusercontent.com/macgregor/bitburner/master/bot/module_coding_contracts.js",
