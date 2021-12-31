@@ -80,9 +80,10 @@ class ServerBreachAction extends lib.Action{
 }
 
 class BotnetAttack extends lib.Action{
-  constructor(name, script){
+  constructor(name, script, scriptBody){
       super(name)
       this.script = script
+      this.scriptBody = scriptBody
   }
 
   async isActionable(context){
@@ -96,6 +97,10 @@ class BotnetAttack extends lib.Action{
     const costPerThread = this.cost(context)
     const botnet = context.network.botnetServers()
     const targets = await this.targets(context)
+
+    if(!context.network.server("home").hasFile(this.script)){
+      await context.ns.write(this.script, this.scriptBody, "w")
+    }
 
     for(const target of targets){
       var threadsNeeded = await this.threadsNeeded(context, target) - this.threadsRunning(context, target)
@@ -180,8 +185,12 @@ class BotnetAttack extends lib.Action{
 }
 
 class WeakenAttack extends BotnetAttack {
+  static SCRIPT_BODY = `
+export async function main(ns) {
+  await ns.weaken(ns.args[0]);
+}`
   constructor(){
-      super("Weaken security level on target servers", "_weaken.js")
+      super("Weaken security level on target servers", "_weaken.js", WeakenAttack.SCRIPT_BODY)
   }
 
   async targets(context){
@@ -201,8 +210,12 @@ class WeakenAttack extends BotnetAttack {
 }
 
 class GrowAttack extends BotnetAttack {
+  static SCRIPT_BODY = `
+export async function main(ns) {
+  await ns.grow(ns.args[0]);
+}`
   constructor(){
-      super("Grow available money on target servers", "_grow.js")
+      super("Grow available money on target servers", "_grow.js", GrowAttack.SCRIPT_BODY)
   }
 
   async targets(context){
@@ -222,8 +235,13 @@ class GrowAttack extends BotnetAttack {
 }
 
 class HackAttack extends BotnetAttack {
+  static SCRIPT_BODY = `
+export async function main(ns) {
+  await ns.hack(ns.args[0]);
+}`
+
   constructor(){
-      super("Hack target servers to steal money", "_hack.js")
+      super("Hack target servers to steal money", "_hack.js", HackAttack.SCRIPT_BODY)
   }
 
   async targets(context){
