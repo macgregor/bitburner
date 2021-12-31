@@ -7,6 +7,7 @@
   "disabledModules": ["module_stock_trader.js","module_singularity.js"],
   "loggers": {
     "root": "info",
-    "lib.Bot": "info"
+    "lib.ModuleEngine": "debug",
+    "lib.BotEngine": "info"
   }
 }

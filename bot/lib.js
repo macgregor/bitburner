@@ -39,15 +39,15 @@ async function PortLogEmitter(script, name, level, msg, data=null){
  level = level.toLowerCase()
  var time = new Date().toUTCString()
  var logMsg = {
-   script: this.script,
-   name: this.name,
+   script: script,
+   name: name,
    time: new Date().toUTCString(),
    level: level.toLowerCase(),
    msg: msg,
    data: data
  }
  if(LOG_LEVELS[level] <= LOG_LEVELS[context.logLevel(name)]){
-   return context.ns.writePort(context.logPort, JSON.stringify(logMsg))
+   return await context.ns.writePort(context.logPort, JSON.stringify(logMsg))
  }
 }
 
@@ -102,7 +102,6 @@ export class Context{
        this.disabledModules = orElse(config, "disabledModules", [])
        this.logLevels = orElse(config, "loggers", this.logLevels)
        this.logLevels.root = orElse(this.logLevels, "root", "info")
-        }
    }
 
    setPlayerInfo(playerInfo){
@@ -112,11 +111,6 @@ export class Context{
 
    setNetwork(network){
      this.network = network
-     return this
-   }
-
-   setLogEmitter(emitter){
-     this.logEmitter = emitter
      return this
    }
 
@@ -130,7 +124,7 @@ export class Context{
           return level
         }
       }
-      return this.loggers.root
+      return this.logLevels.root
    }
 
    playerInitializer(){
@@ -149,8 +143,8 @@ export class Context{
 
 export class ModuleContext extends Context{
  /** @param {NS} ns **/
- constructor(ns, args=null){
-     super(ns, args)
+ constructor(ns, configFilename){
+     super(ns, configFilename)
  }
 
  logEmitter(){
@@ -209,7 +203,7 @@ export class Logger {
    const emitter = Context.instance().logEmitter()
    const localBuffer = Logger._BUFFER
    Logger._BUFFER = []
-   for(const log of Logger._BUFFER){
+   for(const log of localBuffer){
      await emitter(...log)
    }
  }
@@ -854,7 +848,7 @@ export class Module extends Base{
 
 export class BotEngine extends Base{
 
-    constructor(context, modules){
+    constructor(context){
       super()
       Context.initialize(context)
       context.setPlayerInfo(new PlayerInfo())
@@ -960,36 +954,41 @@ export class ModuleEngine extends Base{
   }
 
   async main(){
-      this.context.ns.clearLog()
-      Logger.disableNoisyLogs()
-      await this.context.refreshData()
-      this.logger.debug(await this.displayActions())
+      try{
+        this.context.ns.clearLog()
+        Logger.disableNoisyLogs()
+        await this.context.refreshData()
+        this.logger.debug(await this.displayActions())
 
-      var possibleActions = []
-      for(const action of this.actions){
-        if(await action.isActionable(this.context)){
-          possibleActions.push({"action": action, "priority": await action.priority(this.context)})
-        }
-      }
-      possibleActions.sort((a, b) => a.priority - b.priority)
-
-      if(possibleActions.length > 0){
-          const lowestPriority = possibleActions[0].priority
-          var choosenActions = possibleActions
-              .filter(a => a.priority == lowestPriority)
-              .map(a => a.action)
-          for(const action of choosenActions){
-            const results = await action.performAction(this.context)
-            const status = results && results.success ? "SUCCESS" : "FAILED"
-            const details = results && results.details ? results.details : false
-            this.logger.info("Action: " + action.name + " - " + status)
-            if(details){
-              this.logger.info("Details: ", details)
-            }
+        var possibleActions = []
+        for(const action of this.actions){
+          if(await action.isActionable(this.context)){
+            possibleActions.push({"action": action, "priority": await action.priority(this.context)})
           }
-      } else{
-        this.logger.debug("Nothing to do.")
+        }
+        possibleActions.sort((a, b) => a.priority - b.priority)
+
+        if(possibleActions.length > 0){
+            const lowestPriority = possibleActions[0].priority
+            var choosenActions = possibleActions
+                .filter(a => a.priority == lowestPriority)
+                .map(a => a.action)
+            for(const action of choosenActions){
+              const results = await action.performAction(this.context)
+              const status = results && results.success ? "SUCCESS" : "FAILED"
+              const details = results && results.details ? results.details : false
+              this.logger.info("Action: " + action.name + " - " + status)
+              if(details){
+                this.logger.info("Details: ", details)
+              }
+            }
+        } else{
+          this.logger.debug("Nothing to do.")
+        }
+      } catch(error){
+        this.logger.error("Unexpected error", error)
       }
+      await Logger.emitLogs()
   }
 }
 

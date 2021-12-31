@@ -52,7 +52,7 @@ class ServerBreachAction extends lib.Action{
   async performAction(context){
     var results = {success: true, details: {}}
     for(const s of context.network.vulnerableServers()){
-      await this.logger.info("Breaching " + s.hostname)
+      this.logger.info("Breaching " + s.hostname)
       if(context.playerInfo.canCrackSsh()){
         context.ns.brutessh(s.hostname)
       }
@@ -150,7 +150,7 @@ class BotnetAttack extends lib.Action{
       .flatMap(b => b.procSearch())
       .filter(proc => proc.args && proc.args.length > 0 && targets.includes(proc.args[0]))
       .map(proc => proc.args[0])
-    await this.logger.debug("Already targeted", alreadyTargeted)
+    this.logger.debug("Already targeted", alreadyTargeted)
 
     return context.network.potentialTargetServers()
       .filter(s => !alreadyTargeted.includes(s.hostname))
@@ -159,7 +159,7 @@ class BotnetAttack extends lib.Action{
   async threadsAvailable(context){
     const botnet = context.network.botnetServers()
     const threads = Math.floor((lib.Network.maxRam(botnet) - lib.Network.ramUsed(botnet) - context.homeRamReserve) / this.cost(context))
-    await this.logger.debug("Threds available: " + threads)
+    this.logger.debug("Threds available: " + threads)
     return threads
   }
 

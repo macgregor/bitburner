@@ -57,12 +57,14 @@ class ModuleLauncher extends lib.Module{
 
 function loadModules(context){
   const modules = []
-  const home = context.network.server("home")
-  for(const f of home.files){
+  const files = context.ns.ls("home")
+  for(const f of files){
     if(f.startsWith("module_")){
       modules.push(new ModuleLauncher(f))
     }
   }
+  context.ns.tprint(modules)
+  return modules
 }
 
 /** @param {NS} ns **/
