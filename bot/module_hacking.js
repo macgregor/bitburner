@@ -2,8 +2,8 @@ import * as lib from "lib.js";
 
 class HackingContext extends lib.ModuleContext {
   /** @param {NS} ns **/
-  constructor(ns, args){
-      super(ns, args)
+  constructor(ns, configFilename){
+      super(ns, configFilename)
   }
 
   playerInitializer(){

@@ -2,8 +2,8 @@ import * as lib from "lib.js";
 
 class PurchaseServersContext extends lib.ModuleContext {
   /** @param {NS} ns **/
-  constructor(ns, args){
-      super(ns, args)
+  constructor(ns, configFilename){
+      super(ns, configFilename)
   }
 
   playerInitializer(){
@@ -191,7 +191,9 @@ class PurchaseServerAction extends ServerPurchaseAction {
 export async function main(ns) {
 	const context = new PurchaseServersContext(ns, "config.txt")
   const bot = new lib.ModuleEngine(context)
-  await ns.write(context.fileLock, 0, "w")
+  if(!ns.fileExists(context.fileLock)){
+    await ns.write(context.fileLock, 0, "w")
+  }
   bot.setActions([
     new MarkServerForUpgradeAction(10),
     new RemoveServerAction(20),

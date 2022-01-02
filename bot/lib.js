@@ -30,45 +30,80 @@
    return defaultValue
  }
 
- /** need to be outside of Logger due to some particulars about how javascript
-  * initializes class and static attributes, declaration order matters if you
-  * want to avoid circular dependency issues
-  */
-async function PortLogEmitter(script, name, level, msg, data=null){
- const context = Context.instance()
- level = level.toLowerCase()
- var time = new Date().toUTCString()
- var logMsg = {
-   script: script,
-   name: name,
-   time: new Date().toUTCString(),
-   level: level.toLowerCase(),
-   msg: msg,
-   data: data
- }
- if(LOG_LEVELS[level] <= LOG_LEVELS[context.logLevel(name)]){
-   return await context.ns.writePort(context.logPort, JSON.stringify(logMsg))
- }
-}
+ export class LogEmitters {
+   static async PortLogEmitter(script, name, level, msg, data=null){
+    const context = Context.instance()
 
-/** need to be outside of Logger due to some particulars about how javascript
- * initializes class and static attributes, declaration order matters if you
- * want to avoid circular dependency issues
- */
-async function NativeLogEmitter(script, name, level, msg, data=null){
- const context = Context.instance()
- level = level.toLowerCase()
- var time = new Date().toUTCString()
+    level = level ? level.toLowerCase() : level
+    if(!LOG_LEVELS.hasOwnProperty(level)){
+      level = "info"
+    }
 
- var logMsg = StringFormatter.sprintf("[%s] - %s - %s - %s: \n%s", time, level, script, name, msg)
- if(data){
-   logMsg += "\n" + JSON.stringify(data, null, 2)
- }
+    var logMsg = {
+      script: script,
+      name: name,
+      time: new Date().toUTCString(),
+      level: level,
+      msg: msg,
+      data: data
+    }
+    logMsg = JSON.stringify(logMsg, null, 2)
 
- if(LOG_LEVELS[level] <= LOG_LEVELS[context.logLevel(name)]){
-   return context.ns.print(logMsg)
+    if(!context){
+      console.log(logMsg)
+    } else{
+      if(LOG_LEVELS[level] <= LOG_LEVELS[context.logLevel(name)]){
+        if(!await context.ns.tryWritePort(context.logPort,logMsg)){
+          console.log(logMsg)
+        }
+      }
+    }
+
+
+   }
+
+   static async NativeLogEmitter(script, name, level, msg, data=null){
+    const context = Context.instance()
+    var time = new Date().toUTCString()
+
+    level = level ? level.toLowerCase() : level
+    if(!LOG_LEVELS.hasOwnProperty(level)){
+      level = "info"
+    }
+
+    var logMsg = StringFormatter.sprintf("[%s] - %s - %s - %s: \n%s", time, level, script, name, msg)
+    if(data){
+      logMsg += "\n" + JSON.stringify(data, null, 2)
+    }
+
+    if(!context){
+      console.log(logMsg)
+    } else{
+      if(LOG_LEVELS[level] <= LOG_LEVELS[context.logLevel(name)]){
+        context.ns.print(logMsg)
+      }
+    }
+   }
+
+   static async ConsoleLogEmitter(script, name, level, msg, data=null){
+     const context = Context.instance()
+     var time = new Date().toUTCString()
+     level = level ? level.toLowerCase() : level
+     if(!LOG_LEVELS.hasOwnProperty(level)){
+       level = "info"
+     }
+
+     var logMsg = StringFormatter.sprintf("[%s] - %s - %s - %s: \n%s", time, level, script, name, msg)
+     if(data){
+       logMsg += "\n" + JSON.stringify(data, null, 2)
+     }
+
+     if(!context || LOG_LEVELS[level] <= LOG_LEVELS[context.logLevel(name)]){
+       console.log(logMsg)
+     }
+   }
+
  }
-}
 
 export class Context{
 
@@ -86,22 +121,7 @@ export class Context{
    constructor(ns, configFilename="config.txt"){
        this.ns = ns
        this.configFilename = configFilename
-       this.logLevels = {"root": "info"}
-
-       var config = {}
-       try{
-         config = JSON.parse(ns.read(configFilename))
-       } catch(error){
-         Logger.getLogger(this).error("Unable to parse config file")
-       }
-       this.logPort = orElse(config, "logPort", 1)
-       this.cashReserve = orElse(config, "cashReserve", 10000000)
-       this.homeRamReserve = orElse(config, "homeRamReserve", 32)
-       this.purchaseServerHostname = orElse(config, "purchaseServerHostname", "pserv")
-       this.fileLock = orElse(config, "fileLock", "_lock.txt")
-       this.disabledModules = orElse(config, "disabledModules", [])
-       this.logLevels = orElse(config, "loggers", this.logLevels)
-       this.logLevels.root = orElse(this.logLevels, "root", "info")
+       this.config = {}
    }
 
    setPlayerInfo(playerInfo){
@@ -115,8 +135,29 @@ export class Context{
    }
 
    logEmitter(){
-     return NativeLogEmitter
+     return LogEmitters.NativeLogEmitter
    }
+
+   loadConfig(){
+     this.config = {}
+     try{
+       const configData = this.ns.read(this.configFilename)
+       Logger.getLogger(this).debug(configData)
+       this.config = JSON.parse(configData)
+       Logger.getLogger(this).debug(JSON.stringify(this.config, null, 2))
+     } catch(error){
+       Logger.getLogger(this).error("Unable to parse config file", error)
+       this.config = {}
+     }
+   }
+
+   get logPort() { return orElse(this.config, "logPort", 1) }
+   get cashReserve() { return orElse(this.config, "cashReserve", 10000000) }
+   get homeRamReserve() { return orElse(this.config, "homeRamReserve", 32) }
+   get purchaseServerHostname() { return orElse(this.config, "purchaseServerHostname", "pserv") }
+   get fileLock() { return orElse(this.config, "fileLock", "_lock.txt") }
+   get disabledModules() { return orElse(this.config, "disabledModules", []) }
+   get logLevels() { return orElse(this.config, "loggers", {"root": "info"}) }
 
    logLevel(name){
       for(const [logName, level] of Object.entries(this.logLevels)){
@@ -148,7 +189,7 @@ export class ModuleContext extends Context{
  }
 
  logEmitter(){
-   return PortLogEmitter
+   return LogEmitters.PortLogEmitter
  }
 }
 
@@ -173,7 +214,7 @@ export class Logger {
  static getLogger(name=null, script=null){
    if(!name){
      name = "lib.root"
-   } else if(name.constructor.name != "String"){
+   } else if (typeof name != "string" || name.constructor.name != "String"){
      name = "lib."+name.constructor.name
    }
 
@@ -181,13 +222,9 @@ export class Logger {
    if(!script){
      script = context && context.ns ? context.ns.getScriptName() : ""
    }
-   const logEmitter = context && context.logEmitter() ? context.logEmitter() : NativeLogEmitter
    var key = script+name
    if(!Logger._LOGGERS.hasOwnProperty(key)){
-     Logger._LOGGERS[key] = new Logger(script, name, logEmitter)
-   }
-   if(Logger._LOGGERS[key].emitter != logEmitter){
-     Logger._LOGGERS[key].emitter = logEmitter
+     Logger._LOGGERS[key] = new Logger(script, name)
    }
    return Logger._LOGGERS[key]
  }
@@ -200,11 +237,14 @@ export class Logger {
  }
 
  static async emitLogs(){
-   const emitter = Context.instance().logEmitter()
    const localBuffer = Logger._BUFFER
    Logger._BUFFER = []
+   const context = Context.instance()
+   const emitter = context && context.logEmitter() ? context.logEmitter() : LogEmitters.ConsoleLogEmitter
    for(const log of localBuffer){
-     await emitter(...log)
+     try{
+       await emitter(...log)
+     } catch(error){}
    }
  }
 
@@ -597,6 +637,10 @@ export class Network extends Base{
     }
 
     async _scan(){
+
+    }
+
+    async refreshData(){
       this.servers = []
       var home = new ServerInfo("home", ["home"])
       let visited = { "home": home };
@@ -617,10 +661,6 @@ export class Network extends Base{
                 queue.push(n)
             })
       }
-    }
-
-    async refreshData(){
-        await this._scan()
     }
 
     server(hostname){
@@ -784,17 +824,17 @@ export class Module extends Base{
 
   async isProcRunning(context){
     const host = await this.determineHost(context)
+    await host.refreshData()
     const args = await this.determineArgs(context)
     const procs = host.procSearch(this.script, args)
     return procs && procs.length > 0
   }
 
-  async canLaunch(context){
-    if(context.disabledModules.includes(this.script)){
-      this.logger.debug(StringFormatter.sprintf("Module %s unlaunchable: disabled in config file.", this.script))
-      return false
-    }
+  enabled(){
+    return !this.context.disabledModules.includes(this.script)
+  }
 
+  async canLaunch(context){
     const threads = await this.determineThreads(context)
     const host = await this.determineHost(context)
     if(!host){
@@ -842,6 +882,7 @@ export class Module extends Base{
     const args = await this.determineArgs(context)
     const results = {success: true, details: {host: host.hostname, script: this.script, threads: threads, args: args}}
     results.success = await this.execWrapper(context, this.script, host, threads, args)
+    await host.refreshData()
     return results
   }
 }
@@ -851,6 +892,7 @@ export class BotEngine extends Base{
     constructor(context){
       super()
       Context.initialize(context)
+      context.loadConfig()
       context.setPlayerInfo(new PlayerInfo())
       context.setNetwork(new Network())
       this.modules = []
@@ -863,12 +905,14 @@ export class BotEngine extends Base{
 
     async displayModules(){
         const table = new PrintableTable()
-        table.setHeader(["Module", "Host", "Threads", "Args"])
+        table.setHeader(["Module", "Enabled", "Launchable", "RAM (GB)", "Exec Host", "Threads", "Args"])
         for(const module of this.modules){
+            const launchable = await module.canLaunch(this.context)
             const host = await module.determineHost(this.context)
+            const cost = await module.costWrapper(this.context, module.script)
             const threads = await module.determineThreads(this.context)
             const args = await module.determineArgs(this.context)
-            table.addRow([module.script, host.hostname, threads, args])
+            table.addRow([module.script, module.enabled(), launchable, cost, host.hostname, threads, args])
         }
         table.sortRows(0)
         return table.toString()
@@ -879,15 +923,20 @@ export class BotEngine extends Base{
     }
 
     async main(){
+        this.context.loadConfig()
         await this.context.refreshData()
         for(const module of this.modules){
           const launchable = await module.canLaunch(this.context)
-          if(launchable){
+          if(module.enabled() && launchable){
             this.logger.debug("Launching module: " + module.script)
             const results = await module.launch(this.context)
+
+            // if you try to start processes too quickly they might fail due to RAM counts being off
+            await this.context.ns.sleep(200)
             if(results.success){
               const start = Date.now()
               while(await module.isProcRunning(this.context)){
+                this.logger.debug("Waiting for module to complete: " + module.script)
                 if(Date.now()-start < module.timeout){
                   await this.idle()
                   await this.context.ns.sleep(200)
@@ -896,14 +945,14 @@ export class BotEngine extends Base{
                   await module.killProc(this.context)
                 }
               }
+            } else{
+              this.logger.warn("Module " + module.script + " failed to launch.", results)
             }
           }
         }
     }
 
     async logAggregator(){
-      if(!this.context) return
-
       var logMsg = this.context.ns.readPort(this.context.logPort)
       while(logMsg != "NULL PORT DATA"){
         logMsg = JSON.parse(logMsg)
@@ -917,7 +966,8 @@ export class BotEngine extends Base{
     async daemon(sleepMs=500){
     	this.context.ns.clearLog()
     	Logger.disableNoisyLogs()
-      this.logger.debug(await this.displayModules())
+      await this.context.refreshData()
+      this.logger.info(await this.displayModules())
       while(true){
     		await this.main()
         await this.idle()
@@ -931,6 +981,7 @@ export class ModuleEngine extends Base{
   constructor(context){
       super()
       Context.initialize(context)
+      context.loadConfig()
       context.setPlayerInfo(new PlayerInfo())
       context.setNetwork(new Network())
       this.actions = []
@@ -947,7 +998,7 @@ export class ModuleEngine extends Base{
     for(const action of this.actions){
         const priority = await action.priority(this.context)
         const actionable = await action.isActionable(this.context)
-        table.addRow([priority.toString(), action.name, actionable])
+        table.addRow([priority, action.name, actionable])
     }
     table.sortRows(0, 1)
     return table.toString()
@@ -957,6 +1008,7 @@ export class ModuleEngine extends Base{
       try{
         this.context.ns.clearLog()
         Logger.disableNoisyLogs()
+        this.context.loadConfig()
         await this.context.refreshData()
         this.logger.debug(await this.displayActions())
 
@@ -1000,23 +1052,48 @@ export class PrintableTable extends Base{
         this._maxLengths = []
     }
 
+    _dataAsStrings(data){
+      var dataAsStrings = []
+      for(var i in data){
+        if(data[i] == null || data[i] == undefined){
+          dataAsStrings[i] = ""
+        } else if(data[i].constructor.name == "String"){
+          dataAsStrings[i] = data[i]
+        }else if(data[i].constructor.name == "Array"){
+          dataAsStrings[i] = this._dataAsStrings(data[i])
+        } else if(data[i].constructor.name == "Object"){
+          try{
+            dataAsStrings[i] = JSON.stringify(data[i], null, 2).split("\n")
+          } catch(error){
+            dataAsStrings[i] = String(data[i])
+          }
+        } else if(typeof data[i].toString === "function"){
+          dataAsStrings[i] = data[i].toString()
+        } else{
+          dataAsStrings[i] = String(data[i])
+        }
+      }
+      return dataAsStrings
+    }
+
     _updateMaxLengths(data){
         if(this._maxLengths.length == 0){
             data.forEach(d => this._maxLengths.push(0))
         }
 
         for(var i in data){
-            var dataString = data[i] != null ? data[i].toString() : "null"
-            if(data[i] && data[i].constructor.name == "Array"){
-                dataString = ""
+            var dataString = ""
+            if(data[i].constructor.name == "Array"){
                 for(var j in data[i]){
                     if(data[i][j].length > dataString.length){
                         dataString = data[i][j]
                     }
                 }
+            } else{
+                dataString = data[i]
             }
             if(dataString.length > this._maxLengths[i]){
-                this._maxLengths[i] = data[i].length
+              this._maxLengths[i] = dataString.length
             }
         }
     }
@@ -1025,10 +1102,9 @@ export class PrintableTable extends Base{
         var padded = []
         var i = 0
         for(var i = 0; i < data.length; i++){
-            var dataString = data[i] != null ? data[i].toString() : "null"
-            var whiteSpaceNeeded = (this._maxLengths[i] - dataString.length) + 1
+            var whiteSpaceNeeded = (this._maxLengths[i] - data[i].length) + 1
             var whitespace = whiteSpaceNeeded > 0 ? " ".repeat(whiteSpaceNeeded) : ""
-            padded.push(" " + dataString+whitespace)
+            padded.push(" " + data[i]+whitespace)
         }
         return padded
     }
@@ -1067,12 +1143,12 @@ export class PrintableTable extends Base{
 
     setHeader(header){
         this.header = header
-        this._updateMaxLengths(header)
+        this._updateMaxLengths(this._dataAsStrings(header))
     }
 
     addRow(row){
         this.rows.push(row)
-        this._updateMaxLengths(row)
+        this._updateMaxLengths(this._dataAsStrings(row))
     }
 
     sortRows(...columns){
@@ -1090,20 +1166,23 @@ export class PrintableTable extends Base{
 
     toString(){
         var buff = []
-        var headerLine = StringFormatter.sprintf("|%s|", this._addPadding(this.header).join("|"))
+        var headerStrings = this._addPadding(this._dataAsStrings(this.header))
+
+        var headerLine = StringFormatter.sprintf("|%s|", headerStrings.join("|"))
         var headerSep = "=".repeat(headerLine.length)
         var rowSep = "-".repeat(headerLine.length)
         buff.push(headerSep)
         buff.push(headerLine)
         buff.push(headerSep)
 
-        this.rows.forEach(r => {
-            var expanded = this._expandArrays(r)
-            for(var i in expanded){
-                buff.push(StringFormatter.sprintf("|%s|", this._addPadding(expanded[i]).join("|")))
-            }
-            buff.push(rowSep)
-        })
+        this.rows.map(r => this._dataAsStrings(r))
+          .map(r => this._expandArrays(r))
+          .forEach(r => {
+              for(var i in r){
+                  buff.push(StringFormatter.sprintf("|%s|", this._addPadding(r[i]).join("|")))
+              }
+              buff.push(rowSep)
+          })
         return buff.join("\n")
     }
 }

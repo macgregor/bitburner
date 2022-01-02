@@ -2,8 +2,8 @@ import * as lib from "lib.js";
 
 class BotContext extends lib.Context {
   /** @param {NS} ns **/
-  constructor(ns, args){
-      super(ns, args)
+  constructor(ns, configFilename){
+      super(ns, configFilename)
   }
 
   playerInitializer(){
@@ -63,7 +63,6 @@ function loadModules(context){
       modules.push(new ModuleLauncher(f))
     }
   }
-  context.ns.tprint(modules)
   return modules
 }
 

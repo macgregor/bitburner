@@ -340,8 +340,8 @@ function findAllValidMathExpressions(data){
 
 class CodingContractContext extends lib.ModuleContext {
   /** @param {NS} ns **/
-  constructor(ns, args){
-      super(ns, args)
+  constructor(ns, configFilename){
+      super(ns, configFilename)
   }
 
   serverInitializer(){
