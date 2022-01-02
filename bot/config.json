@@ -4,7 +4,7 @@
   "homeRamReserve": 32,
   "purchaseServerHostname": "pserv",
   "fileLock": "_lock.txt",
-  "disabledModules": ["module_stock_trader.js","module_singularity.js"],
+  "disabledModules": ["module_stock_trader.js"],
   "loggers": {
     "root": "info",
     "lib.ModuleEngine": "debug",

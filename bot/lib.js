@@ -480,6 +480,11 @@ export class PlayerInfo extends NetscriptDataProxy{
           purchaseNodeCost: 0,
           studyMult: 1.0,
           trainingMult: 1.0,
+        },
+        singularity:{
+          ownedSourceFiles: [],
+          isFocused: true,
+          isBusy: true
         }
       }
     }
@@ -537,9 +542,19 @@ export class PlayerInfo extends NetscriptDataProxy{
     hacknetHashCapacity(){ return this.hacknetInfo.hashCapacity }
     hacknetNumHashes(){ return this.hacknetInfo.numHashes }
     hasFormulaApiAccess(){ return this.files.includes("Formulas.exe") }
+    hasSourceFile(n, lvl=1){
+      for(const sourceFile of this.ownedSourceFiles){
+        if(sourceFile.n == n && sourceFile.lvl >= lvl){
+          return true
+        }
+      }
+      return false
+    }
     hackingSkill(){ return this.info.hacking}
     hasTor(){ return this.info.tor }
     intelligence(){ return this.info.intelligence }
+    isBusy(){ return this.info.singularity.isBusy }
+    isFocused(){ return this.info.singularity.isFocused }
     money(){ return this.info.money }
     moneySpendable(){ return this.money() - this.context.cashReserve }
     numHashnetHashes(){ return }
@@ -607,6 +622,7 @@ export class ServerInfo extends NetscriptDataProxy {
         return filtered
     }
     availableRam(){ return this.maxRam() - this.ramUsed() }
+    backdoorInstalled(){ return this.info.backdoorInstalled }
     codingContracts(){ return this.files.filter(f => f.endsWith(".cct")) }
     cpuCores(){ return this.info.cpuCores }
     growTime(){ return this.info.growTime }
@@ -785,13 +801,14 @@ export class Network extends Base{
 }
 
 export class Action extends Base{
-    constructor(name){
+    constructor(name, staticPriority=0){
         super()
         this.name = name
+        this.staticPriority = staticPriority
     }
 
     async priority(context){
-      throw new TypeError("You need to implement this yourself");
+      return this.staticPriority
     }
 
     async isActionable(context){

@@ -6,8 +6,9 @@
     "module_coding_contracts.js": "https://raw.githubusercontent.com/macgregor/bitburner/master/bot/module_coding_contracts.js",
     "module_hacking.js": "https://raw.githubusercontent.com/macgregor/bitburner/master/bot/module_hacking.js",
     "module_purchase_servers.js": "https://raw.githubusercontent.com/macgregor/bitburner/master/bot/module_purchase_servers.js",
-    "module_singularity.js": "https://raw.githubusercontent.com/macgregor/bitburner/master/bot/module_singularity.js",
+    "module_backdoor.js": "https://raw.githubusercontent.com/macgregor/bitburner/master/bot/module_backdoor.js",
     "module_stock_trader.js": "https://raw.githubusercontent.com/macgregor/bitburner/master/bot/module_stock_trader.js",
+    "module_factions.js": "https://raw.githubusercontent.com/macgregor/bitburner/master/bot/module_factions.js",
     "config.txt": "https://raw.githubusercontent.com/macgregor/bitburner/master/bot/config.json"
   }
 }
