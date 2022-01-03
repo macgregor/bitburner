@@ -39,6 +39,14 @@
       level = "info"
     }
 
+    if (data && data.stack && data.message) {
+      // it's an error, probably
+      data = {
+        message: data.message,
+        stack: data.stack,
+      }
+    }
+
     var logMsg = {
       script: script,
       name: name,
@@ -72,7 +80,12 @@
     }
 
     var logMsg = StringFormatter.sprintf("[%s] - %s - %s - %s: \n%s", time, level, script, name, msg)
-    if(data){
+
+    if (data && data.stack && data.message) {
+      // it's an error, probably
+      logMsg += "\nError: " + data.message
+      logMsg += "\n" + data.stack
+    } else if(data){
       logMsg += "\n" + JSON.stringify(data, null, 2)
     }
 
@@ -94,7 +107,11 @@
      }
 
      var logMsg = StringFormatter.sprintf("[%s] - %s - %s - %s: \n%s", time, level, script, name, msg)
-     if(data){
+     if (data && data.stack && data.message) {
+       // it's an error, probably
+       logMsg += "\nError: " + data.message
+       logMsg += "\n" + data.stack
+     } else if(data){
        logMsg += "\n" + JSON.stringify(data, null, 2)
      }
 
@@ -158,6 +175,8 @@ export class Context{
    get fileLock() { return orElse(this.config, "fileLock", "_lock.txt") }
    get disabledModules() { return orElse(this.config, "disabledModules", []) }
    get logLevels() { return orElse(this.config, "loggers", {"root": "info"}) }
+   get spendMoney(){ return orElse(this.config, "spendMoney", false) }
+   get minPurchaseServerUpgradeLevels(){ return orElse(this.config, "minPurchaseServerUpgradeLevels", 2) }
 
    logLevel(name){
       for(const [logName, level] of Object.entries(this.logLevels)){
@@ -483,8 +502,11 @@ export class PlayerInfo extends NetscriptDataProxy{
         },
         singularity:{
           ownedSourceFiles: [],
-          isFocused: true,
-          isBusy: true
+          focused: true,
+          busy: true
+        },
+        sleeve: {
+          numSleeves: 0
         }
       }
     }
@@ -539,11 +561,12 @@ export class PlayerInfo extends NetscriptDataProxy{
     canCrackSql(){ return this.files.includes("SQLInject.exe") }
     canCrackFtp(){ return this.files.includes("FTPCrack.exe") }
     canCrackHttp(){ return this.files.includes("HTTPWorm.exe") }
+    currentBitnode(){ return this.info.bitNodeN }
     hacknetHashCapacity(){ return this.hacknetInfo.hashCapacity }
     hacknetNumHashes(){ return this.hacknetInfo.numHashes }
     hasFormulaApiAccess(){ return this.files.includes("Formulas.exe") }
     hasSourceFile(n, lvl=1){
-      for(const sourceFile of this.ownedSourceFiles){
+      for(const sourceFile of this.singularity.ownedSourceFiles){
         if(sourceFile.n == n && sourceFile.lvl >= lvl){
           return true
         }
@@ -553,8 +576,8 @@ export class PlayerInfo extends NetscriptDataProxy{
     hackingSkill(){ return this.info.hacking}
     hasTor(){ return this.info.tor }
     intelligence(){ return this.info.intelligence }
-    isBusy(){ return this.info.singularity.isBusy }
-    isFocused(){ return this.info.singularity.isFocused }
+    busy(){ return this.singularity.busy }
+    focused(){ return this.singularity.focused }
     money(){ return this.info.money }
     moneySpendable(){ return this.money() - this.context.cashReserve }
     numHashnetHashes(){ return }
@@ -807,6 +830,35 @@ export class Action extends Base{
         this.staticPriority = staticPriority
     }
 
+    taskResults(task, success, details=null, error=null){
+      const result = {
+        task: task,
+        success: success
+      }
+      if(details != null){
+        result.details = details
+      }
+      if(error != null){
+        results.error = error
+      }
+      return result
+    }
+
+    actionResults(...taskResults){
+      const overallSuccess = true
+      for(const task of taskResults){
+        if(!task.success){
+          overallSuccess = false
+          break
+        }
+      }
+      return {
+        action: this.name,
+        success: overallSuccess,
+        tasks: taskResults
+      }
+    }
+
     async priority(context){
       return this.staticPriority
     }
@@ -1043,12 +1095,13 @@ export class ModuleEngine extends Base{
                 .filter(a => a.priority == lowestPriority)
                 .map(a => a.action)
             for(const action of choosenActions){
-              const results = await action.performAction(this.context)
-              const status = results && results.success ? "SUCCESS" : "FAILED"
-              const details = results && results.details ? results.details : false
-              this.logger.info("Action: " + action.name + " - " + status)
-              if(details){
-                this.logger.info("Details: ", details)
+              // refresh context and check if still actionable incase a previous
+              // action changed the state of things
+              await this.context.refreshData()
+              if(await action.isActionable(this.context)){
+                const results = await action.performAction(this.context)
+                const status = results && results.success ? "SUCCESS" : "FAILED"
+                Logger.getLogger(action).info("Action: " + action.name + " - " + status, results)
               }
             }
         } else{

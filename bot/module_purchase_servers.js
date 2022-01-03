@@ -65,6 +65,7 @@ class ServerPurchaseAction extends lib.Action {
     var maxAffordableUpgrade = null
     const affordableUpgrades = this.serverSizes.filter(s => this.context.playerInfo.moneySpendable() > s.cost)
     if(affordableUpgrades.length > 0){
+      //
       maxAffordableUpgrade = affordableUpgrades[affordableUpgrades.length-1]
     }
 
@@ -75,12 +76,7 @@ class ServerPurchaseAction extends lib.Action {
     const upgrades = this.context.network.purchasedServers()
       .filter(s => s.maxRam() < this.maxPurchaseRam)
       .map(s => {
-        const upgrades = this.serverSizes.filter(u => u.ram > s.maxRam())
-        var nextUpgrade = null
-        if(upgrades.length > 0){
-          nextUpgrade = upgrades[0]
-        }
-
+        // how many levels the upgrade provides, e.g. 2GB => 8GB == 2
         var upgradeJump = 0
         if(maxAffordableUpgrade != null && s.maxRam() < maxAffordableUpgrade.ram){
           upgradeJump = Math.log2(maxAffordableUpgrade.ram) - Math.log2(s.maxRam())
@@ -89,10 +85,14 @@ class ServerPurchaseAction extends lib.Action {
         return {
           hostname: s.hostname,
           ram: s.maxRam(),
-          nextUpgrade: nextUpgrade,
+          nextUpgrade: maxAffordableUpgrade,
           upgradeJump: upgradeJump
         }
       })
+      .filter(u => u.upgradeJump >= this.context.minPurchaseServerUpgradeLevels)
+
+      // purchase largest upgrade increase first to minimize overall cost
+      // (since you dont get money back when you delete a server)
       upgrades.sort((a, b) => b.upgradeJump - a.upgradeJump)
 
       const markedForUpgrade = this.context.network.purchasedServers()
@@ -116,9 +116,11 @@ class MarkServerForUpgradeAction extends ServerPurchaseAction {
 
   async isActionable(context){
     const status = this.status()
-    return status.serverSpaceAvailable == 0 &&
+    return context.spendMoney &&
+      status.serverSpaceAvailable == 0 &&
       status.markedForUpgrade.length == 0 &&
       status.maxAffordableUpgrade != null &&
+      status.upgrades.length > 0 &&
       status.maxedServers.length < this.purchasedServerLimit
   }
 
@@ -126,10 +128,7 @@ class MarkServerForUpgradeAction extends ServerPurchaseAction {
     const status = this.status()
     const toUpgrade = status.upgrades[0]
     const success = await context.ns.scp(context.fileLock, "home", toUpgrade.hostname)
-    return {
-      success: success,
-      details: toUpgrade
-    }
+    return this.actionResults(this.taskResults(toUpgrade.hostname, success, toUpgrade))
   }
 }
 
@@ -142,23 +141,16 @@ class RemoveServerAction extends ServerPurchaseAction {
     const toUpgrade = context.network.purchasedServers()
       .filter(s => s.isMarkedForUpgrade())
       .filter(s => s.procSearch().length == 0)
-    return toUpgrade.length > 0
+    return context.spendMoney && toUpgrade.length > 0
   }
 
   async performAction(context){
-    const results = {success: true, details: []}
-    results.details = context.network.purchasedServers()
+    const taskResults = context.network.purchasedServers()
       .filter(s => s.isMarkedForUpgrade())
       .filter(s => s.procSearch().length == 0)
-      .map(s => {
-        const status = this.context.ns.deleteServer(s.hostname) ? "SUCCESS" : "FAILED"
-        if(status == "FAILED"){
-          results.success = false
-        }
-        return {hostname: s.hostname, status: status}
-      })
+      .map(s => this.taskResults(s.hostname, this.context.ns.deleteServer(s.hostname), {ram: s.maxRam()}))
 
-    return results
+    return this.actionResults(...taskResults)
   }
 }
 
@@ -170,20 +162,16 @@ class PurchaseServerAction extends ServerPurchaseAction {
   async isActionable(context){
     const status = this.status()
     //await this.logger.debug("", status)
-    return status.serverSpaceAvailable > 0 && status.maxAffordableUpgrade != null
+    return context.spendMoney &&
+      status.serverSpaceAvailable > 0 &&
+      status.maxAffordableUpgrade != null
   }
 
   async performAction(context){
     const status = this.status()
-    const results = {success: true, details: status}
     const hostname = this.context.ns.purchaseServer(context.purchaseServerHostname, status.maxAffordableUpgrade.ram)
-    if(!hostname.startsWith(context.purchaseServerHostname)){
-      results.success = false
-      results.details.status = "FAILED"
-    } else{
-      results.details.status = "SUCCESS"
-    }
-    return results
+    const taskResults = this.taskResults(context.purchaseServerHostname, hostname.startsWith(context.purchaseServerHostname), status.maxAffordableUpgrade)
+    return this.actionResults(taskResults)
   }
 }
 

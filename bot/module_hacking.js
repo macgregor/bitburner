@@ -37,12 +37,8 @@ class HackingContext extends lib.ModuleContext {
 }
 
 class ServerBreachAction extends lib.Action{
-  constructor(){
-      super("Breach vulnerable servers")
-  }
-
-  async priority(context){
-    return 10
+  constructor(staticPriority){
+      super("Breach vulnerable servers", staticPriority)
   }
 
   async isActionable(context){
@@ -50,9 +46,8 @@ class ServerBreachAction extends lib.Action{
   }
 
   async performAction(context){
-    var results = {success: true, details: {}}
+    const taskResults = []
     for(const s of context.network.vulnerableServers()){
-      this.logger.info("Breaching " + s.hostname)
       if(context.playerInfo.canCrackSsh()){
         context.ns.brutessh(s.hostname)
       }
@@ -70,18 +65,15 @@ class ServerBreachAction extends lib.Action{
       }
       context.ns.nuke(s.hostname)
       await s.refreshData()
-      results.details[s.hostname] = s.haveRootAccess()
-      if(!s.haveRootAccess()){
-        results.success = false
-      }
+      taskResults.push(this.taskResults(s.hostname, s.haveRootAccess()))
     }
-    return results
+    return this.actionResults(...taskResults)
   }
 }
 
 class BotnetAttack extends lib.Action{
-  constructor(name, script, scriptBody){
-      super(name)
+  constructor(name, staticPriority, script, scriptBody){
+      super(name, staticPriority)
       this.script = script
       this.scriptBody = scriptBody
   }
@@ -94,6 +86,7 @@ class BotnetAttack extends lib.Action{
 
   async performAction(context){
     const results = {success: true, details: []}
+    const taskResults = []
     const costPerThread = this.cost(context)
     const botnet = context.network.botnetServers()
     const targets = await this.targets(context)
@@ -107,30 +100,36 @@ class BotnetAttack extends lib.Action{
       var bestHost = this.determineBestHost(botnet, context.homeRamReserve, threadsNeeded, costPerThread)
       var threadsStarted = 0
       while(bestHost && bestHost.server && bestHost.threads > 0 && threadsStarted < threadsNeeded){
-        if(!bestHost.server.hasFile(this.script)){
-          await context.ns.scp(this.script, "home", bestHost.server.hostname)
-          await bestHost.server.refreshData()
-        }
-        var attackResults = {
+        var attackDetails = {
           script: this.script,
           target: target.hostname,
           host: bestHost.server.hostname,
           threads: bestHost.threads,
-          status: context.ns.exec(this.script, bestHost.server.hostname, bestHost.threads, target.hostname) ? "SUCCESS" : "EXEC FAILED"
         }
-        results.details.push(attackResults)
-        if(attackResults.status == "SUCCESS"){
-          threadsStarted += bestHost.threads
-          await bestHost.server.refreshData()
-          threadsNeeded = await this.threadsNeeded(context, target) - this.threadsRunning(context, target)
-          bestHost = this.determineBestHost(botnet, context.homeRamReserve, threadsNeeded, costPerThread)
-        } else{
-          results.success = false
-          break
+        var attackError = null
+        var success = false
+        try{
+          if(!bestHost.server.hasFile(this.script)){
+            await context.ns.scp(this.script, "home", bestHost.server.hostname)
+            await bestHost.server.refreshData()
+          }
+          if(context.ns.exec(this.script, bestHost.server.hostname, bestHost.threads, target.hostname)){
+            success = true
+            threadsStarted += bestHost.threads
+            await bestHost.server.refreshData()
+            threadsNeeded = await this.threadsNeeded(context, target) - this.threadsRunning(context, target)
+            bestHost = this.determineBestHost(botnet, context.homeRamReserve, threadsNeeded, costPerThread)
+          } else{
+            attackError = "exec FAILED"
+            break
+          }
+        } catch(error){
+          attackError = error
         }
+        taskResults.push(this.taskResults(this.script + " targeting " + target.hostname, success, attackDetails, attackError))
       }
     }
-    return results
+    return this.actionResults(...taskResults)
   }
 
   cost(context){
@@ -189,17 +188,13 @@ class WeakenAttack extends BotnetAttack {
 export async function main(ns) {
   await ns.weaken(ns.args[0]);
 }`
-  constructor(){
-      super("Weaken security level on target servers", "_weaken.js", WeakenAttack.SCRIPT_BODY)
+  constructor(staticPriority){
+      super("Weaken security level on target servers", staticPriority, "_weaken.js", WeakenAttack.SCRIPT_BODY)
   }
 
   async targets(context){
     const targets = await super.targets(context)
     return targets.filter(t => t.serverSecurityLevel() > t.minSecurityLevel())
-  }
-
-  async priority(context){
-    return 20
   }
 
   async threadsNeeded(context, target){
@@ -214,17 +209,13 @@ class GrowAttack extends BotnetAttack {
 export async function main(ns) {
   await ns.grow(ns.args[0]);
 }`
-  constructor(){
-      super("Grow available money on target servers", "_grow.js", GrowAttack.SCRIPT_BODY)
+  constructor(staticPriority){
+      super("Grow available money on target servers", staticPriority, "_grow.js", GrowAttack.SCRIPT_BODY)
   }
 
   async targets(context){
     const targets = await super.targets(context)
     return targets.filter(t => t.moneyAvailable() < t.moneyMax() && t.serverSecurityLevel() == t.minSecurityLevel())
-  }
-
-  async priority(context){
-    return 20
   }
 
   async threadsNeeded(context, target){
@@ -240,17 +231,13 @@ export async function main(ns) {
   await ns.hack(ns.args[0]);
 }`
 
-  constructor(){
-      super("Hack target servers to steal money", "_hack.js", HackAttack.SCRIPT_BODY)
+  constructor(staticPriority){
+      super("Hack target servers to steal money", staticPriority, "_hack.js", HackAttack.SCRIPT_BODY)
   }
 
   async targets(context){
     const targets = await super.targets(context)
     return targets.filter(t => t.moneyAvailable() == t.moneyMax() && t.serverSecurityLevel() == t.minSecurityLevel())
-  }
-
-  async priority(context){
-    return 20
   }
 
   async threadsNeeded(context, target){
@@ -267,10 +254,10 @@ export async function main(ns) {
 	const context = new HackingContext(ns, "config.txt")
   const bot = new lib.ModuleEngine(context)
   bot.setActions([
-    new ServerBreachAction(),
-    new WeakenAttack(),
-    new GrowAttack(),
-    new HackAttack(),
+    new ServerBreachAction(0),
+    new WeakenAttack(1),
+    new GrowAttack(1),
+    new HackAttack(1),
 	])
 
 	await bot.main()

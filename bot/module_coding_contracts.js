@@ -355,8 +355,8 @@ class CodingContractContext extends lib.ModuleContext {
 }
 
 class CompleteCodingContracts extends lib.Action {
-  constructor(){
-      super("Find and complete coding contracts")
+  constructor(staticPriority){
+      super("Find and complete coding contracts", staticPriority)
       this.solutions = {
         "Find Largest Prime Factor": largestPrimeFactor,
         "Subarray with Maximum Sum": subarrayWithMaximumSum,
@@ -375,10 +375,6 @@ class CompleteCodingContracts extends lib.Action {
         "Sanitize Parentheses in Expression": sanitizeParenthesesInExpression,
         "Find All Valid Math Expressions": findAllValidMathExpressions,
       }
-  }
-
-  async priority(context){
-    return 0
   }
 
   async isActionable(context){
@@ -403,39 +399,37 @@ class CompleteCodingContracts extends lib.Action {
             contractType: contractType,
             data: data,
             //description: context.ns.codingcontract.getDescription(f, s.hostname),
-            answer: answer
+            answer: answer,
+            reward: "",
         }
       }))
-    const results = {success: true, details: []}
+    const taskResults = []
     for(const contract of contracts){
       if(contract.triesRemaining < 1){
-        results.success = false
-        contract.status = "FAILED"
-        contract.details = "No more tries remaining for contract"
+        taskResults.push(this.taskResults(contract.contractType, false, contract, "No more tries remaining for contract"))
       } else if(contract.answer == null){
-        results.success = false
-        contract.status = "FAILED"
-        contract.details = "No solution for contract"
+        taskResults.push(this.taskResults(contract.contractType, false, contract, "No solution for contract"))
       } else{
-        const reward = context.ns.codingcontract.attempt(contract.answer, contract.file, contract.hostname, {returnReward: true})
-        if(reward != ""){
-          contract.status = "SUCCESS"
-          contract.details = "Reward: " + reward
+        contract.reward = context.ns.codingcontract.attempt(contract.answer, contract.file, contract.hostname, {returnReward: true})
+        if(contract.reward != ""){
+          taskResults.push(this.taskResults(contract.contractType, true, contract))
         } else{
           contract.triesRemaining -= 1
-          results.success = false
-          contract.status = "FAILED"
-          contract.details = "Incorrect answer"
+          taskResults.push(this.taskResults(contract.contractType, false, contract, "Incorrect answer"))
         }
       }
-      if(contract.answer.constructor.name == "Array" && contract.answer.length > 10){
-        var shortAnswer = contract.answer.slice(0, 10)
-        shortAnswer.push("..." + contract.answer.length-10 + " more")
-        contract.answer = shortAnswer
+      if(contract.answer && contract.answer.constructor.name == "Array" && contract.answer.length > 5){
+        var shortAnswer = contract.answer.slice(0, 5)
+        shortAnswer.push("..." + contract.answer.length-5 + " more")
+        taskResults[taskResults.length-1].details.answer = shortAnswer
       }
-      results.details.push(contract)
+      if(contract.data && contract.data.constructor.name == "Array" && contract.data.length > 5){
+        var shortData = contract.data.slice(0, 5)
+        shortData.push("..." + contract.data.length-5 + " more")
+        taskResults[taskResults.length-1].details.data = shortData
+      }
     }
-    return results
+    return this.actionResults(...taskResults)
   }
 }
 
@@ -445,7 +439,7 @@ export async function main(ns) {
   const context = new CodingContractContext(ns, "config.txt")
   const bot = new lib.ModuleEngine(context)
   bot.setActions([
-    new CompleteCodingContracts()
+    new CompleteCodingContracts(0)
 	])
 
 	await bot.main()

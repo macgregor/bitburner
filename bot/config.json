@@ -3,11 +3,16 @@
   "cashReserve": 10000000,
   "homeRamReserve": 32,
   "purchaseServerHostname": "pserv",
+  "minPurchaseServerUpgradeLevels": 2,
   "fileLock": "_lock.txt",
+  "spendMoney": true,
   "disabledModules": ["module_stock_trader.js"],
   "loggers": {
     "root": "info",
     "lib.ModuleEngine": "debug",
-    "lib.BotEngine": "info"
+    "lib.BotEngine": "info",
+    "lib.HackAttack": "error",
+    "lib.GrowAttack": "error",
+    "lib.WeakenAttack": "error"
   }
 }

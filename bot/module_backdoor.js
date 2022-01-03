@@ -11,15 +11,9 @@ class BackdoorContext extends lib.ModuleContext {
       return {
         info: context.ns.getPlayer(),
         karma: context.ns.heart.break(),
-        //files: context.ns.ls("home"),
-        //hackingMultipliers: this.ns.getHackingMultipliers(),
-        //bitnodeMultipliers: this.ns.getBitNodeMultipliers(),
-        hackingMultipliers: {},
-        bitnodeMultipliers: {},
         singularity: {
           ownedSourceFiles: context.ns.getOwnedSourceFiles(),
-          isBusy: context.ns.isBusy(),
-          isFocused: context.ns.isFocused()
+          focused: context.ns.isFocused()
         }
       }
     }
@@ -30,8 +24,6 @@ class BackdoorContext extends lib.ModuleContext {
       return {
         info: context.ns.getServer(server.hostname),
         neighbors: context.ns.scan(server.hostname),
-        //files: context.ns.ls(server.hostname),
-        //processes: context.ns.ps(server.hostname)
       }
     }
   }
@@ -68,32 +60,31 @@ class InstallBackdoorAction extends lib.Action{
 
   async isActionable(context){
     const servers = this.backdoorServers()
-    return context.playerInfo.hasSourceFile(4, 1) && servers.length > 0
+    return context.playerInfo.hasSourceFile(4, 1) &&
+      !context.playerInfo.focused() &&
+      servers.length > 0
   }
 
   async performAction(context){
-    const results = {success: true, action: "install backdoor", details: []}
     const servers = this.backdoorServers()
+    var taskResults = []
     if(servers.length > 0){
       try{
         for(const server of this.backdoorServers()){
-          const r = {hostname: server.hostname, status: "FAILED"}
           if(!this.connect(server)){
-            r.status = "FAILED to connect"
-            results.success = false
+            taskResults.push(this.taskResults(server.hostname, false, null, "FAILED to connect to server"))
           } else{
             await context.ns.installBackdoor()
-            server.refreshData()
-            r.status = server.backdoorInstalled() ? "SUCCESS" : "FAILED to install backdoor"
-            results.success = false
+            await server.refreshData()
+            var maybeError = server.backdoorInstalled() ? null : "FAILED to install backdoor"
+            taskResults.push(this.taskResults(server.hostname, server.backdoorInstalled(), null, maybeError))
           }
-          results.details.push(r)
         }
       } finally{
         this.connect(context.network.server("home"))
       }
     }
-    return results
+    return this.actionResults(...taskResults)
   }
 }
 
