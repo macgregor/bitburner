@@ -171,12 +171,23 @@ export class Context{
    get logPort() { return orElse(this.config, "logPort", 1) }
    get cashReserve() { return orElse(this.config, "cashReserve", 10000000) }
    get homeRamReserve() { return orElse(this.config, "homeRamReserve", 32) }
-   get purchaseServerHostname() { return orElse(this.config, "purchaseServerHostname", "pserv") }
-   get fileLock() { return orElse(this.config, "fileLock", "_lock.txt") }
-   get disabledModules() { return orElse(this.config, "disabledModules", []) }
+   get disabledModules() {
+     return Object.keys(this.config)
+      .filter(key => this.config[key] != null && this.config[key] != undefined)
+      .filter(key => typeof this.config[key] == "object" || this.config[key].constructor.name == "Object")
+      .filter(key => this.config[key].disabled)
+   }
    get logLevels() { return orElse(this.config, "loggers", {"root": "info"}) }
    get spendMoney(){ return orElse(this.config, "spendMoney", false) }
-   get minPurchaseServerUpgradeLevels(){ return orElse(this.config, "minPurchaseServerUpgradeLevels", 2) }
+
+   /** module_factions */
+   get factionJoinBlacklist(){ return orElse(this.config["module_factions.js"], "joinBlacklist", []) }
+
+   /** module_purchase_servers */
+   get purchaseServerHostname() { return orElse(this.config["module_purchase_servers.js"], "purchaseServerHostname", "pserv") }
+   get upgradeLock() { return orElse(this.config["module_purchase_servers.js"], "upgradeLock", "_upgrade.txt") }
+   get minPurchaseServerUpgradeLevels(){ return orElse(this.config["module_purchase_servers"], "minPurchaseServerUpgradeLevels", 2) }
+   get maxPurchaseServerCost(){ return orElse(this.config["module_purchase_servers.js"], "maxPurchaseServerCost", -1) }
 
    logLevel(name){
       for(const [logName, level] of Object.entries(this.logLevels)){
@@ -655,7 +666,7 @@ export class ServerInfo extends NetscriptDataProxy {
     haveRootAccess(){ return this.info.hasAdminRights }
     isHacknetServer(){ return this.hostname.startsWith("hacknet-node")}
     isHome(){ return this.hostname == "home" }
-    isMarkedForUpgrade(){ return this.files.includes(this.context.fileLock) }
+    isMarkedForUpgrade(){ return this.isPurchasedByPlayer() && this.files.includes(this.context.upgradeLock) }
     isPurchasedByPlayer(){ return this.info.purchasedByPlayer && !this.isHome() }
     maxRam(){ return this.info.maxRam }
     minSecurityLevel(){ return this.info.minDifficulty }
@@ -747,7 +758,7 @@ export class Network extends Base{
      */
     botnetServers(hostnamesOnly=false){
         var servers =  this.servers
-          .filter(s => s.haveRootAccess() && !s.isMarkedForUpgrade())
+          .filter(s => s.haveRootAccess())
           .filter(s => !s.isMarkedForUpgrade())
           .filter(s => !s.isHacknetServer() || this.context.playerInfo.atHacknetHashLimit())
         return this._postProcess(servers, hostnamesOnly)
@@ -845,7 +856,7 @@ export class Action extends Base{
     }
 
     actionResults(...taskResults){
-      const overallSuccess = true
+      var overallSuccess = true
       for(const task of taskResults){
         if(!task.success){
           overallSuccess = false

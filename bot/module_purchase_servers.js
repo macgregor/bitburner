@@ -63,9 +63,10 @@ class ServerPurchaseAction extends lib.Action {
 
   status(){
     var maxAffordableUpgrade = null
-    const affordableUpgrades = this.serverSizes.filter(s => this.context.playerInfo.moneySpendable() > s.cost)
+    const affordableUpgrades = this.serverSizes
+      .filter(s => this.context.playerInfo.moneySpendable() > s.cost)
+      .filter(s=> this.context.maxPurchaseServerCost < 0 || s.cost < this.context.maxPurchaseServerCost)
     if(affordableUpgrades.length > 0){
-      //
       maxAffordableUpgrade = affordableUpgrades[affordableUpgrades.length-1]
     }
 
@@ -89,7 +90,10 @@ class ServerPurchaseAction extends lib.Action {
           upgradeJump: upgradeJump
         }
       })
-      .filter(u => u.upgradeJump >= this.context.minPurchaseServerUpgradeLevels)
+      .filter(u => {
+        return u.upgradeJump >= this.context.minPurchaseServerUpgradeLevels ||
+          (u.nextUpgrade && u.nextUpgrade.ram == this.maxPurchaseRam)
+       })
 
       // purchase largest upgrade increase first to minimize overall cost
       // (since you dont get money back when you delete a server)
@@ -127,7 +131,10 @@ class MarkServerForUpgradeAction extends ServerPurchaseAction {
   async performAction(context){
     const status = this.status()
     const toUpgrade = status.upgrades[0]
-    const success = await context.ns.scp(context.fileLock, "home", toUpgrade.hostname)
+    if(!context.ns.fileExists(context.upgradeLock, "home")){
+      await context.ns.write(context.upgradeLock, 0, "w")
+    }
+    const success = await context.ns.scp(context.upgradeLock, "home", toUpgrade.hostname)
     return this.actionResults(this.taskResults(toUpgrade.hostname, success, toUpgrade))
   }
 }
@@ -145,7 +152,7 @@ class RemoveServerAction extends ServerPurchaseAction {
   }
 
   async performAction(context){
-    const taskResults = context.network.purchasedServers()
+    var taskResults = context.network.purchasedServers()
       .filter(s => s.isMarkedForUpgrade())
       .filter(s => s.procSearch().length == 0)
       .map(s => this.taskResults(s.hostname, this.context.ns.deleteServer(s.hostname), {ram: s.maxRam()}))
@@ -179,9 +186,6 @@ class PurchaseServerAction extends ServerPurchaseAction {
 export async function main(ns) {
 	const context = new PurchaseServersContext(ns, "config.txt")
   const bot = new lib.ModuleEngine(context)
-  if(!ns.fileExists(context.fileLock)){
-    await ns.write(context.fileLock, 0, "w")
-  }
   bot.setActions([
     new MarkServerForUpgradeAction(10),
     new RemoveServerAction(20),

@@ -1,5 +1,14 @@
 import * as lib from "lib.js";
 
+class Faction extends lib.Base {
+
+  constructor(name, requirements){
+    super()
+    this.name = name
+    this.requirements = requirements
+  }
+}
+
 class FactionContext extends lib.ModuleContext {
   /** @param {NS} ns **/
   constructor(ns, configFilename){
@@ -26,22 +35,26 @@ class FactionContext extends lib.ModuleContext {
   }
 }
 
-
 class JoinFactionsAction extends lib.Action{
   constructor(staticPriority){
       super("Accept faction invites", staticPriority)
   }
 
+  joinableFactions(){
+    return context.ns.checkFactionInvitations()
+      .filter(f => !this.context.factionJoinBlacklist().includes(f))
+  }
+
   async isActionable(context){
     return context.playerInfo.hasSourceFile(4, 2) &&
       !context.playerInfo.focused() &&
-      context.ns.checkFactionInvitations().length > 0
+      this.joinableFactions().length > 0
   }
 
   async performAction(context){
     const results = {success: true, action: "join factions", details: []}
     const taskResults = []
-    for(const f of context.ns.checkFactionInvitations()){
+    for(const f of this.joinableFactions()){
       taskResults.push(this.taskResults(f, context.ns.joinFaction(f)))
     }
     return this.actionResults(...taskResults)
